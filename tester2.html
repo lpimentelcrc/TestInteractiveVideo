@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Food Prep Training Flow</title>
+<style>
+  :root { --accent:#4a4aff; }
+
+  * { box-sizing: border-box; }
+
+  body{
+    margin:0;
+    background:#000;
+    color:#fff;
+    font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial;
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    min-height:100vh;
+    padding:24px 16px 28px;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  /* Text */
+  h1{
+    margin:0 0 6px;
+    text-align:center;
+    font-weight:800;
+    /* Big on tablets/TV, still fits phones */
+    font-size: clamp(22px, 5.2vw, 54px);
+    line-height:1.1;
+    letter-spacing: 0.2px;
+  }
+  .subtitle{
+    margin:0 0 18px;
+    text-align:center;
+    color:#cfd6ff;
+    font-weight:600;
+    font-size: clamp(14px, 3.2vw, 24px);
+    min-height: 1.25em; /* reserve space even when empty */
+  }
+
+  /* Player wrapper: responsive, looks great on tablet/TV */
+  .frame-wrap{
+    width: min(96vw, 1280px);
+    aspect-ratio: 16/9;
+    border-radius: 16px;
+    overflow:hidden;
+    box-shadow: 0 10px 38px rgba(0,0,0,0.5);
+    position:relative;
+    background:#0a0b12;
+  }
+  /* The iframe UI is disabled; prevent tap from showing any overlay */
+  iframe{
+    position:absolute; inset:0; width:100%; height:100%; border:0;
+    pointer-events:none; /* block native UI overlays */
+  }
+
+  /* Status + controls row */
+  .row{
+    width:min(96vw, 1280px);
+    display:flex; align-items:center; gap:8px;
+    margin: 10px 0 0;
+  }
+  .pill{
+    padding:10px 14px;
+    border-radius:999px;
+    font-size: clamp(13px, 2.8vw, 16px);
+    color:#e7ebff;
+    background:#11121c;
+    border:1px solid #
