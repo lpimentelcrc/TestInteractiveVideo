@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Food Prep Training Flow</title>
+<style>
+  :root { --accent:#4a4aff; }
+  * { box-sizing: border-box; }
+  body {
+    background: #000;
+    color: #fff;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: flex-start;
+    min-height: 100vh;
+    margin: 0;
+    padding: 40px 16px 24px;
+    font-family: system-ui, Arial, sans-serif;
+  }
+  h1 { margin: 0 0 20px; text-align:center; font-size: clamp(20px,4vw,28px); }
+  .frame-wrap {
+    width: 720px;
+    max-width: 100%;
+    aspect-ratio: 16 / 9;
+    border-radius: 12px;
+    box-shadow: 0 0 20px rgba(255,255,255,0.25);
+    overflow: hidden;
+  }
+  iframe {
+    width: 100%;
+    height: 100%;
+    border: none;
+    display: block;
+  }
+  button.primary {
+    margin-top: 16px;
+    padding: 14px 22px;
+    font-size: clamp(16px,4.5vw,18px);
+    border: none;
+    border-radius: 12px;
+    background: var(--accent);
+    color: white;
+    cursor: pointer;
+    font-weight: 700;
+    box-shadow: 0 8px 24px rgba(74,74,255,0.35);
+    touch-action: manipulation;
+  }
+  button.primary:active { transform: scale(0.98); }
+  button.primary[hidden] { display: none; }
+  .row {
+    width: 720px;
+    max-width: 100%;
+    display: flex;
+    gap: 8px;
+    margin-top: 10px;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .pill {
+    padding: 10px 14px;
+    font-size: 14px;
+    border-radius: 999px;
+    background: #12121a;
+    border: 1px solid #2f3044;
+    color: #d6dbff;
+  }
+  .mute {
+    margin-left: auto;
+    background: #1a1b27;
+    border: 1px solid #2c2f45;
+    color: #fff;
+    border-radius: 999px;
+    padding: 10px 14px;
+    cursor: pointer;
+  }
+</style>
+</head>
+<body>
+
+<h1 id="stepTitle">Hair Net</h1>
+
+<div class="frame-wrap">
+  <!-- privacy-enhanced embed; API enabled; mobile inline; custom chrome off -->
+  <iframe
+    id="ytplayer"
+    src="https://www.youtube-nocookie.com/embed/O1vwSjB8WKw?enablejsapi=1&playsinline=1&controls=0&modestbranding=1&rel=0&fs=0&iv_load_policy=3"
+    title="Food Prep Step"
+    allow="autoplay; encrypted-media"
+    referrerpolicy="strict-origin-when-cross-origin"
+    allowfullscreen
+  ></iframe>
+</div>
+
+<div class="row">
+  <span class="pill" id="stepPill">Step 1 of 3</span>
+  <button id="muteBtn" class="mute" type="button" aria-label="Unmute">🔊 Unmute</button>
+</div>
+
+<button id="ctaBtn" class="primary" hidden>Next</button>
+
+<script>
+  // --- Step configuration (IDs from your links) ---
+  const STEPS = [
+    { id: "O1vwSjB8WKw", title: "Hair Net",   cta: "Next"  },
+    { id: "WkHrh-_Nh8Y", title: "Wash Hands", cta: "Next"  },
+    { id: "M95eVd3a0fU", title: "Gloves",     cta: "Start" }
+  ];
+
+  const titleEl = document.getElementById('stepTitle');
+  const stepPill = document.getElementById('stepPill');
+  const ctaBtn = document.getElementById('ctaBtn');
+  const muteBtn = document.getElementById('muteBtn');
+
+  let player;
+  let current = 0;
+  const firstPlayDone = [false, false, false];
+
+  // Load YouTube IFrame API
+  const tag = document.createElement('script');
+  tag.src = "https://www.youtube.com/iframe_api";
+  document.head.appendChild(tag);
+
+  function setUI() {
+    titleEl.textContent = STEPS[current].title;
+    stepPill.textContent = `Step ${current + 1} of ${STEPS.length}`;
+    ctaBtn.textContent = STEPS[current].cta;
+    ctaBtn.hidden = !firstPlayDone[current];
+  }
+
+  // YT API hook
+  function onYouTubeIframeAPIReady() {
+    player = new YT.Player('ytplayer', {
+      host: 'https://www.youtube-nocookie.com',
+      events: {
+        'onReady': onReady,
+        'onStateChange': onState
+      }
+    });
+  }
+  window.onYouTubeIframeAPIReady = onYouTubeIframeAPIReady;
+
+  function onReady() {
+    try { player.mute(); } catch(e){}
+    try { player.playVideo(); } catch(e){}
+    // Poll for end, then loop; using ENDED state too for reliability
+    requestAnimationFrame(tick);
+  }
+
+  function onState(e) {
+    const YTP = YT.PlayerState;
+    if (e.data === YTP.ENDED) {
+      if (!firstPlayDone[current]) {
+        firstPlayDone[current] = true;
+        ctaBtn.hidden = false;
+      }
+      // Manual loop
+      safeLoop();
+    }
+  }
+
+  function safeLoop() {
+    try {
+      player.seekTo(0, true);
+      player.playVideo();
+    } catch (e) {
+      setTimeout(() => { try { player.playVideo(); } catch(_){} }, 60);
+    }
+  }
+
+  // Extra guard: time-based loop in case ENDED isn’t fired on some devices
+  function tick() {
+    if (player && typeof player.getDuration === 'function' && typeof player.getCurrentTime === 'function') {
+      const dur = player.getDuration();
+      const t = player.getCurrentTime();
+      if (dur && t >= dur - 0.05) {
+        // Near the end
+        if (!firstPlayDone[current]) {
+          firstPlayDone[current] = true;
+          ctaBtn.hidden = false;
+        }
+      }
+    }
+    requestAnimationFrame(tick);
+  }
+
+  ctaBtn.addEventListener('click', () => {
+    const isLast = current === STEPS.length - 1;
+    if (isLast) {
+      // Default: restart the sequence (change this to navigate elsewhere if you want)
+      firstPlayDone.fill(false);
+      goTo(0);
+    } else {
+      goTo(current + 1);
+    }
+  });
+
+  muteBtn.addEventListener('click', () => {
+    if (!player || typeof player.isMuted !== 'function') return;
+    if (player.isMuted()) {
+      player.unMute();
+      muteBtn.textContent = "🔈 Mute";
+      muteBtn.setAttribute('aria-label', 'Mute');
+    } else {
+      player.mute();
+      muteBtn.textContent = "🔊 Unmute";
+      muteBtn.setAttribute('aria-label', 'Unmute');
+    }
+    try { player.playVideo(); } catch(e){}
+  });
+
+  function goTo(index) {
+    current = index;
+    setUI();
+    try {
+      player.loadVideoById({
+        videoId: STEPS[current].id
+      });
+    } catch (e) {
+      // Fallback: hard reload the iframe src if API load fails
+      const iframe = document.getElementById('ytplayer');
+      const base = "https://www.youtube-nocookie.com/embed/" + STEPS[current].id;
+      iframe.src = base + "?enablejsapi=1&playsinline=1&controls=0&modestbranding=1&rel=0&fs=0&iv_load_policy=3&autoplay=1";
+    }
+  }
+
+  // Initialize initial UI
+  setUI();
+</script>
+</body>
+</html>
