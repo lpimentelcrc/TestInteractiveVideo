@@ -69,4 +69,219 @@
     font-size: clamp(13px, 2.8vw, 16px);
     color:#e7ebff;
     background:#11121c;
-    border:1px solid #
+    border:1px solid #2b2e44;
+  }
+  .mute{
+    margin-left:auto;
+    background:#1b1d2a;
+    border:1px solid #2c2f45;
+    color:#fff;
+    border-radius:999px;
+    padding:10px 16px;
+    font-size: clamp(14px, 3vw, 18px);
+    cursor:pointer;
+    touch-action: manipulation;
+  }
+
+  /* Big friendly CTA for tablet/TV */
+  .primary{
+    margin-top:16px;
+    width:min(96vw, 1280px);
+    padding: clamp(14px, 3.8vw, 28px) clamp(16px, 4vw, 40px);
+    font-size: clamp(18px, 4.8vw, 36px);
+    border:0;
+    border-radius: 14px;
+    background: var(--accent);
+    color:#fff;
+    font-weight:800;
+    letter-spacing:0.3px;
+    box-shadow: 0 12px 34px rgba(74,125,255,0.35);
+    cursor:pointer;
+    touch-action: manipulation;
+  }
+  .primary:active{ transform: scale(0.985); }
+  .primary[hidden]{ display:none; }
+
+  /* Extra breathing room on large screens / TV */
+  @media (min-width: 1400px){
+    body{ padding-top: 36px; }
+  }
+</style>
+</head>
+<body>
+
+  <h1 id="title">Put a Hair Net On.</h1>
+  <p class="subtitle" id="subtitle">Remember to cover all your hair</p>
+
+  <div class="frame-wrap">
+    <!-- privacy-enhanced domain; controls off; API on; inline; no relateds; minimal branding -->
+    <iframe
+      id="ytplayer"
+      src="https://www.youtube-nocookie.com/embed/O1vwSjB8WKw?enablejsapi=1&playsinline=1&controls=0&modestbranding=1&rel=0&fs=0&iv_load_policy=3&autoplay=1&mute=1"
+      title="Food Prep Step"
+      allow="autoplay; encrypted-media"
+      referrerpolicy="strict-origin-when-cross-origin"
+      allowfullscreen
+    ></iframe>
+  </div>
+
+  <div class="row">
+    <span class="pill" id="stepPill">Step 1 of 3</span>
+    <button id="muteBtn" class="mute" type="button" aria-label="Unmute">🔊 Unmute</button>
+  </div>
+
+  <button id="ctaBtn" class="primary" hidden>Next</button>
+
+<script>
+  // --- Steps: titles + optional subtitles + CTA text ---
+  const STEPS = [
+    { id: "O1vwSjB8WKw", title: "Put a Hair Net On.", subtitle: "Remember to cover all your hair", cta: "Next"  },
+    { id: "WkHrh-_Nh8Y", title: "Wash your hands.",    subtitle: "",                                cta: "Next"  },
+    { id: "M95eVd3a0fU", title: "Put gloves on both your hands.", subtitle: "",                     cta: "Start" }
+  ];
+
+  const titleEl = document.getElementById('title');
+  const subtitleEl = document.getElementById('subtitle');
+  const stepPill = document.getElementById('stepPill');
+  const ctaBtn = document.getElementById('ctaBtn');
+  const muteBtn = document.getElementById('muteBtn');
+
+  let player;
+  let current = 0;
+  const firstPlayDone = [false, false, false];
+
+  // Load YouTube IFrame API
+  const tag = document.createElement('script');
+  tag.src = "https://www.youtube.com/iframe_api";
+  document.head.appendChild(tag);
+
+  // Ensure autoplay whenever the page becomes visible (bfcache/back/foreground)
+  window.addEventListener('visibilitychange', () => {
+    if (!document.hidden) safePlay();
+  });
+  window.addEventListener('pageshow', (e) => {
+    // if returned from bfcache, resume immediately
+    safePlay();
+  });
+  window.addEventListener('focus', safePlay);
+
+  function setUI(){
+    const step = STEPS[current];
+    titleEl.textContent = step.title;
+    subtitleEl.textContent = step.subtitle || "";
+    stepPill.textContent = `Step ${current + 1} of ${STEPS.length}`;
+    ctaBtn.textContent = step.cta;
+    ctaBtn.hidden = !firstPlayDone[current];
+  }
+
+  function onYouTubeIframeAPIReady(){
+    player = new YT.Player('ytplayer', {
+      host: 'https://www.youtube-nocookie.com',
+      events: { onReady: onReady, onStateChange: onState }
+    });
+  }
+  window.onYouTubeIframeAPIReady = onYouTubeIframeAPIReady;
+
+  function onReady(){
+    // mobile autoplay works when muted
+    try{ player.mute(); }catch(e){}
+    safePlay();
+    requestAnimationFrame(tick); // time-guard for end detection
+  }
+
+  function onState(e){
+    const YTP = YT.PlayerState;
+    if (e.data === YTP.UNSTARTED) safePlay();
+    if (e.data === YTP.PAUSED) safePlay();
+    if (e.data === YTP.ENDED){
+      if (!firstPlayDone[current]){
+        firstPlayDone[current] = true;
+        ctaBtn.hidden = false;
+      }
+      loopBack();
+    }
+  }
+
+  function safePlay(){
+    if (!player) return;
+    try{
+      // keep muted for reliable autoplay; user can unmute via button
+      if (typeof player.isMuted === 'function' && !player.isMuted()) player.mute();
+      player.playVideo();
+    }catch(e){}
+  }
+
+  function loopBack(){
+    try{
+      player.seekTo(0, true);
+      player.playVideo();
+    }catch(e){
+      setTimeout(()=>{ try{ player.playVideo(); }catch(_){} }, 60);
+    }
+  }
+
+  // Extra guard: if ENDED isn't fired on some devices, detect near-end and reveal CTA once
+  function tick(){
+    if (player && typeof player.getDuration === 'function' && typeof player.getCurrentTime === 'function'){
+      const dur = player.getDuration();
+      const t = player.getCurrentTime();
+      if (dur && t >= dur - 0.06){
+        if (!firstPlayDone[current]){
+          firstPlayDone[current] = true;
+          ctaBtn.hidden = false;
+        }
+      }
+      // keep it playing when near end as well
+      if (dur && t >= dur - 0.02){
+        loopBack();
+      }
+    }
+    requestAnimationFrame(tick);
+  }
+
+  ctaBtn.addEventListener('click', () => {
+    const last = current === STEPS.length - 1;
+    if (last){
+      // Default behavior: restart the flow.
+      firstPlayDone.fill(false);
+      goTo(0);
+    } else {
+      goTo(current + 1);
+    }
+  });
+
+  muteBtn.addEventListener('click', () => {
+    if (!player || typeof player.isMuted !== 'function') return;
+    if (player.isMuted()){
+      player.unMute();
+      muteBtn.textContent = "🔈 Mute";
+      muteBtn.setAttribute('aria-label','Mute');
+    } else {
+      player.mute();
+      muteBtn.textContent = "🔊 Unmute";
+      muteBtn.setAttribute('aria-label','Unmute');
+    }
+    try{ player.playVideo(); }catch(e){}
+  });
+
+  function goTo(index){
+    current = index;
+    setUI();
+    try{
+      player.loadVideoById({ videoId: STEPS[current].id });
+      // make sure it stays muted and playing on load
+      try{ player.mute(); }catch(e){}
+      safePlay();
+    }catch(e){
+      // Hard reload fallback (rare)
+      const iframe = document.getElementById('ytplayer');
+      iframe.src = "https://www.youtube-nocookie.com/embed/" + STEPS[current].id +
+        "?enablejsapi=1&playsinline=1&controls=0&modestbranding=1&rel=0&fs=0&iv_load_policy=3&autoplay=1&mute=1";
+    }
+  }
+
+  // Initialize labels immediately
+  setUI();
+</script>
+</body>
+</html>
