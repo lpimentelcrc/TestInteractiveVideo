@@ -1,0 +1,30 @@
+{
+    "video_library": {
+        "V_HAIRNET": "O1vwSjB8WKw",
+        "V_WASH_HANDS": "WkHrh-_Nh8Y",
+        "V_PUT_GLOVES": "M95eVd3a0fU"
+    },
+    "tasks": [
+        {
+            "task_name": "Food Prep Safety",
+            "guide_title": "Get ready to food prep",
+            "steps": [
+                { 
+                    "action_id": "V_HAIRNET", 
+                    "step_title": "Put Hairnet On",
+                    "instruction": "Put your hairnet on, making sure to cover all of your hair." 
+                },
+                { 
+                    "action_id": "V_WASH_HANDS", 
+                    "step_title": "Wash your hands",
+                    "instruction": "Wash your hands with soap and water for 25 seconds." 
+                },
+                { 
+                    "action_id": "V_PUT_GLOVES", 
+                    "step_title": "Put Gloves On",
+                    "instruction": "Cover your hands with gloves!" 
+                }
+            ]
+        }
+    ]
+}
