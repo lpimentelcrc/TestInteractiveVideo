@@ -1,0 +1,324 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Interactive Looping Video Player</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Load Inter font for clean modern look -->
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@100..900&display=swap');
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f4f6f8;
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 1rem;
+        }
+        /* Custom styles for the video container to maintain aspect ratio */
+        .video-container {
+            position: relative;
+            padding-bottom: 56.25%; /* 16:9 Aspect Ratio */
+            height: 0;
+            overflow: hidden;
+            background-color: #d1d5db; /* Gray placeholder color */
+            border-radius: 0.75rem;
+        }
+        .video-container iframe {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+        }
+        /* Custom styles for disabled state to ensure proper touch feedback */
+        .btn-disabled {
+            cursor: not-allowed;
+            opacity: 0.5;
+            transform: none !important; /* Override hover/active effects */
+            pointer-events: none; /* Disable mouse events on the button */
+        }
+
+        /* NEW: Custom 25%/75% grid for larger screens */
+        @media (min-width: 768px) {
+            .md\:grid-cols-custom {
+                grid-template-columns: 1fr 3fr; /* 25% Instruction | 75% Video */
+            }
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Main Application Container (Width increased to max-w-6xl) -->
+    <div id="app" class="w-full max-w-6xl bg-white shadow-2xl rounded-xl p-6 md:p-10 transition-all duration-300">
+        <!-- Title will be dynamically updated by JSON data -->
+        <h1 class="text-3xl font-bold text-gray-800 mb-6 border-b pb-2">Interactive Guide (JSON Configured)</h1>
+        
+        <!-- Instruction Card and Video Layout -->
+        <div class="md:grid md:grid-cols-custom md:gap-10">
+
+            <!-- Step and Instructions Column (25% on desktop) -->
+            <div class="md:col-span-1 mb-6 md:mb-0 flex flex-col justify-start">
+                <span id="step-display" class="text-lg font-semibold text-indigo-600 mb-1">Loading...</span>
+                <p id="instructions" class="text-gray-600 leading-relaxed min-h-[4rem]">
+                    Attempting to load configuration data from **food_data.json**...
+                </p>
+                
+                <!-- SINGLE NEXT BUTTON - Positioned in the Instruction Column -->
+                <button id="next-button" class="mt-6 w-full mx-auto max-w-md bg-indigo-500 hover:bg-indigo-600 text-white font-bold py-5 px-4 rounded-lg transition duration-150 ease-in-out shadow-lg shadow-indigo-500/50 transform hover:scale-[1.02] btn-disabled">
+                    Next Step
+                </button>
+            </div>
+
+            <!-- Video Player Column (75% on desktop) -->
+            <div class="md:col-span-1 flex flex-col">
+                <!-- YouTube Player Container -->
+                <div class="video-container">
+                    <div id="player">
+                        <!-- YouTube IFrame will load here -->
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Completion Message -->
+        <div id="completion-message" class="hidden text-center mt-10 p-8 bg-green-50 border-2 border-green-300 rounded-xl">
+            <h2 class="text-3xl font-extrabold text-green-700">🎉 Tutorial Complete! 🎉</h2>
+            <p class="mt-3 text-lg text-green-600">You've finished all the steps in this interactive guide. Great job!</p>
+        </div>
+
+    </div>
+
+    <!-- YouTube IFrame Player API Script -->
+    <script src="https://www.youtube.com/iframe_api"></script>
+
+    <script>
+        // --- Configuration and State ---
+        let player;
+        let currentStep = 0;
+        let videoList = []; // Dynamically loaded from external JSON
+        let fullPlaySeen = []; // Dynamically sized later
+        
+        // --- DOM Elements ---
+        const stepDisplay = document.getElementById('step-display');
+        const instructionsText = document.getElementById('instructions');
+        const nextButton = document.getElementById('next-button');
+        const completionMessage = document.getElementById('completion-message');
+        const appContainer = document.getElementById('app');
+
+        // --- Helper Function ---
+        /**
+         * Enables or disables the Next Step button.
+         */
+        function showNextButton(show) {
+            if (show) {
+                // Enable button and remove disabled styles
+                nextButton.disabled = false;
+                nextButton.classList.remove('btn-disabled');
+            } else {
+                // Disable button and add disabled styles
+                nextButton.disabled = true;
+                nextButton.classList.add('btn-disabled');
+            }
+        }
+
+        // --- Core Functions ---
+
+        /**
+         * Fetches and processes the video list configuration data from 'food_data.json'.
+         * This uses the standard fetch API and relies on 'food_data.json' being accessible
+         * at the root level of your hosting environment.
+         */
+        async function fetchVideoData() {
+            try {
+                // *** ACTUAL FETCH CALL to the external file ***
+                const response = await fetch('food_data.json');
+                
+                if (!response.ok) {
+                     // Throw an error if the HTTP status is not 200-299
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+
+                const config = await response.json();
+                
+                // Assuming we want the first task's guide
+                const task = config.tasks[0];
+                const videoLibrary = config.video_library;
+                
+                // 1. Update the main title from the JSON data
+                document.querySelector('h1').textContent = task.guide_title;
+
+                // 2. Map steps to actual video IDs and instructions
+                const structuredSteps = task.steps.map(step => ({
+                    // Use the videoLibrary to get the actual YouTube ID from the action_id key
+                    id: videoLibrary[step.action_id],
+                    // Store step_title separately for the new heading
+                    title: step.step_title, 
+                    // Store instructions without the title prefix
+                    instructions: step.instruction 
+                }));
+                
+                // Populate global state
+                videoList = structuredSteps;
+                fullPlaySeen = new Array(videoList.length).fill(false);
+
+                console.log(`Video configuration loaded successfully. ${videoList.length} steps found.`);
+            } catch (error) {
+                console.error('Error loading or parsing video data from food_data.json:', error);
+                instructionsText.textContent = `ERROR: Could not load guide data. Please ensure 'food_data.json' is available. Details: ${error.message}`;
+                stepDisplay.textContent = "Error!";
+                showNextButton(false);
+            }
+        }
+
+        /**
+         * 1. Loads the YouTube IFrame Player API.
+         * The function 'onYouTubeIframeAPIReady' is called automatically when the API is ready.
+         * We use this as the primary application entry point, waiting for data load.
+         */
+        window.onYouTubeIframeAPIReady = async function() {
+            // 1. Load the data first
+            await fetchVideoData();
+            
+            // 2. Only proceed if data was loaded successfully
+            if (videoList.length > 0) {
+                loadStep(currentStep);
+            } else {
+                // Keep the error/loading message if data load failed
+            }
+        }
+
+        /**
+         * Initializes or updates the YouTube Player for the current step.
+         */
+        function loadStep(stepIndex) {
+            if (stepIndex >= videoList.length) {
+                showCompletion();
+                return;
+            }
+
+            const video = videoList[stepIndex];
+            
+            // Update UI text: Use step title for the primary display
+            // and include the step number for context
+            stepDisplay.textContent = `${video.title} (Step ${stepIndex + 1})`;
+            instructionsText.textContent = video.instructions;
+
+            // Hide/Show Next button based on viewing history
+            if (fullPlaySeen[stepIndex]) {
+                showNextButton(true);
+            } else {
+                showNextButton(false);
+            }
+
+            const videoOptions = {
+                height: '100%',
+                width: '100%',
+                videoId: video.id,
+                playerVars: {
+                    'controls': 1, // Show player controls
+                    'rel': 0,      // Disable related videos at end
+                    'modestbranding': 1, // Less prominent YouTube logo
+                    'playsinline': 1, // Essential for mobile playback
+                    'autoplay': 1, // Attempt autoplay
+                    'mute': 1      // Crucial for browser autoplay policies
+                },
+                events: {
+                    'onReady': onPlayerReady,
+                    'onStateChange': onPlayerStateChange
+                }
+            };
+
+            if (!player) {
+                // Create the player for the first time
+                player = new YT.Player('player', videoOptions);
+            } else {
+                // Load a new video when moving to the next step
+                player.loadVideoById(video.id);
+            }
+        }
+
+        /**
+         * Called when the YouTube player is ready to be used.
+         */
+        function onPlayerReady(event) {
+            // Force mute, then play. This satisfies most browser autoplay policies.
+            if (typeof event.target.mute === 'function') {
+                event.target.mute();
+            }
+            event.target.playVideo();
+        }
+
+        /**
+         * Called when the player's state changes (playing, paused, ended, etc.).
+         * @param {Object} event - The YouTube event object.
+         */
+        function onPlayerStateChange(event) {
+            const playerState = event.data;
+            const YT_ENDED = 0;
+
+            // State 0 means the video has ended
+            if (playerState === YT_ENDED) {
+                
+                // 1. Check if the video has played through once (required to enable Next button)
+                if (!fullPlaySeen[currentStep]) {
+                    fullPlaySeen[currentStep] = true;
+                    showNextButton(true);
+                    console.log(`Step ${currentStep + 1} viewed once. Next button enabled.`);
+                }
+
+                // 2. LOOOPING LOGIC: Seek to the start and play again
+                player.seekTo(0);
+                player.playVideo();
+                console.log(`Video ended and is now looping for step ${currentStep + 1}`);
+            }
+        }
+
+        /**
+         * Handles the transition to the next step/video.
+         */
+        function nextStep() {
+            // Check if the current step has been watched before proceeding
+            if (!fullPlaySeen[currentStep]) {
+                // This shouldn't happen if the button is correctly disabled, but is a good safeguard.
+                console.warn("Cannot proceed: Video has not finished its first run yet.");
+                return; 
+            }
+
+            // Check if we are at the end of the list
+            if (currentStep >= videoList.length - 1) {
+                showCompletion();
+                return;
+            }
+
+            // Stop the current video before moving on
+            if (player && typeof player.stopVideo === 'function') {
+                player.stopVideo();
+            }
+
+            currentStep++;
+            loadStep(currentStep);
+            
+            // Scroll to top of the app container for better UX on mobile
+            appContainer.scrollIntoView({ behavior: 'smooth' });
+        }
+
+        /**
+         * Shows the completion message and hides the main content.
+         */
+        function showCompletion() {
+            completionMessage.classList.remove('hidden');
+            // Hide all interactive elements
+            const gridContainer = document.querySelector('.md\\:grid');
+            if(gridContainer) gridContainer.classList.add('hidden');
+            document.querySelector('h1').classList.add('hidden');
+        }
+
+        // --- Event Listeners ---
+        nextButton.addEventListener('click', nextStep);
+
+    </script>
+</body>
+</html>
