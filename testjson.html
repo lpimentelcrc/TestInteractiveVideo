@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>Interactive Video Guide</title>
+    <!-- Load Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* Custom Grid for 25:75 split on desktop */
+        .grid-cols-custom {
+            grid-template-columns: 1fr 3fr;
+        }
+
+        /* Styling for the disabled state of the button */
+        .btn-disabled {
+            @apply opacity-50 cursor-not-allowed shadow-none;
+        }
+    </style>
+</head>
+<body class="bg-gray-50 flex items-center justify-center min-h-screen p-4">
+
+    <div id="app-container" class="w-full max-w-6xl bg-white shadow-xl rounded-2xl p-6 md:p-10 transition-all duration-300">
+        
+        <!-- Header -->
+        <header class="mb-6">
+            <h1 id="guideTitle" class="text-3xl font-extrabold text-gray-800">Interactive Guide</h1>
+        </header>
+
+        <main class="grid grid-cols-1 md:grid-cols-custom gap-8 md:gap-12 items-start">
+            
+            <!-- LEFT COLUMN: Instructions and CTA -->
+            <section class="flex flex-col space-y-4">
+                <div class="space-y-2">
+                    <p id="stepPill" class="text-sm font-semibold uppercase tracking-wider text-indigo-600">Step 1</p>
+                    <h2 id="stepDisplay" class="text-2xl font-bold text-gray-800">Video Title</h2>
+                    <p id="stepInstructions" class="text-base text-gray-600 leading-relaxed">Instructions will load here...</p>
+                </div>
+                
+                <!-- CTA Button -->
+                <div class="mt-4">
+                    <button id="nextBtn" class="btn-disabled w-full max-w-xs md:max-w-md mx-auto py-5 px-6 font-bold text-lg rounded-full text-white bg-indigo-600 hover:bg-indigo-700 transition duration-150 shadow-lg shadow-indigo-300" disabled>
+                        Next Step
+                    </button>
+                </div>
+
+                <!-- Completion Message (Initially Hidden) -->
+                <div id="completionMessage" class="hidden mt-8 text-center p-6 border border-green-300 bg-green-50 rounded-lg">
+                    <h3 class="text-xl font-bold text-green-700">Training Complete!</h3>
+                    <p class="text-green-600 mt-2">You have successfully finished all the required steps.</p>
+                    <button id="retakeBtn" class="mt-4 py-3 px-6 bg-green-600 text-white rounded-full font-semibold hover:bg-green-700 transition duration-150">
+                        Retake Training
+                    </button>
+                </div>
+
+            </section>
+
+            <!-- RIGHT COLUMN: Video Player -->
+            <section>
+                <div class="relative w-full aspect-video bg-gray-200 rounded-lg overflow-hidden shadow-xl">
+                    <!-- YouTube player mounts here -->
+                    <div id="player" class="absolute inset-0"></div>
+                </div>
+                <p class="text-xs text-gray-400 mt-2">Video Autoplays muted. Press next when ready.</p>
+            </section>
+
+        </main>
+    </div>
+
+    <!-- YouTube IFrame API and Application Logic -->
+    <script>
+        // Global variables for Firebase configuration (MANDATORY, even if unused)
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
+        const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+
+        const NEXT_BTN_TEXT = "Next Step";
+        const RETAKE_BTN_TEXT = "Retake Training";
+
+        let taskData = null;
+        let player;
+        let currentStepIndex = 0;
+        let isVideoReady = false;
+        let fullPlaySeen = []; // Tracks if the current video has been watched completely once
+
+        // DOM Elements
+        const nextBtn           = document.getElementById("nextBtn");
+        const stepPill          = document.getElementById("stepPill");
+        const stepDisplay       = document.getElementById("stepDisplay");
+        const instructionsEl    = document.getElementById("stepInstructions");
+        const guideTitleEl      = document.getElementById("guideTitle");
+        const completionMessage = document.getElementById("completionMessage");
+        const retakeBtn         = document.getElementById("retakeBtn");
+
+        function loadYouTubeAPI(){
+            const tag = document.createElement('script');
+            tag.src = "https://www.youtube.com/iframe_api";
+            document.head.appendChild(tag);
+        }
+
+        async function loadTasks() {
+            try {
+                // Fetch the external JSON file
+                const response = await fetch('food_data.json');
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                const data = await response.json();
+                taskData = data;
+                
+                // Initialize fullPlaySeen array for the first task
+                const task = taskData.tasks[0];
+                fullPlaySeen = new Array(task.steps.length).fill(false);
+
+                // Initialize UI with the first task and step
+                guideTitleEl.textContent = task.guide_title;
+                
+                // Start YouTube API loading
+                loadYouTubeAPI();
+
+            } catch (e) {
+                console.error("Failed to load task data:", e);
+                instructionsEl.textContent = "Error loading content. Check console for details.";
+            }
+        }
+
+        // YouTube API callback (required global function)
+        window.onYouTubeIframeAPIReady = function(){
+            const firstStepId = taskData.tasks[0].steps[0].action_id;
+            const firstVideoId = taskData.video_library[firstStepId];
+
+            player = new YT.Player('player', {
+                host: 'https://www.youtube-nocookie.com',
+                width: '100%', height: '100%',
+                videoId: firstVideoId,
+                playerVars: {
+                    autoplay: 1,      // Start autoplay (will be muted)
+                    controls: 0,
+                    disablekb: 1,
+                    fs: 0,
+                    rel: 0,
+                    modestbranding: 1,
+                    iv_load_policy: 3,
+                    playsinline: 1,
+                    mute: 1,          // Ensure muted for autoplay compliance
+                    origin: window.location.origin
+                },
+                events: { onReady: onPlayerReady, onStateChange: onPlayerStateChange }
+            });
+        };
+
+        function onPlayerReady(event){
+            isVideoReady = true;
+            event.target.mute(); // Explicitly mute to force autoplay compliance
+            loadStep(0); // Load and start the first step
+        }
+
+        function onPlayerStateChange(event){
+            const YTP = YT.PlayerState;
+            const currentTask = taskData.tasks[0];
+
+            if (event.data === YTP.ENDED){
+                // 1. Check if this is the first time the video ended
+                if (!fullPlaySeen[currentStepIndex]){
+                    fullPlaySeen[currentStepIndex] = true;
+                    // Only enable the button after the first full play
+                    nextBtn.disabled = false;
+                    nextBtn.classList.remove('btn-disabled');
+                    nextBtn.classList.add('shadow-lg');
+                }
+
+                // 2. Loop the video automatically
+                try{
+                    player.seekTo(0, true);
+                    player.playVideo();
+                }catch(e){
+                    // Fallback for immediate restart failure
+                    setTimeout(() => player.playVideo(), 50);
+                }
+            }
+        }
+
+        function loadStep(index) {
+            currentStepIndex = index;
+            const currentTask = taskData.tasks[0];
+            const step = currentTask.steps[index];
+            const videoId = taskData.video_library[step.action_id];
+
+            // Update UI
+            stepPill.textContent = `Step ${index + 1} of ${currentTask.steps.length}`;
+            stepDisplay.textContent = step.step_title;
+            instructionsEl.textContent = step.instruction;
+            
+            // Reset CTA state for the new step
+            nextBtn.textContent = NEXT_BTN_TEXT;
+            nextBtn.disabled = true;
+            nextBtn.classList.add('btn-disabled');
+            nextBtn.classList.remove('shadow-lg');
+            completionMessage.classList.add('hidden');
+            nextBtn.classList.remove('hidden');
+
+            // Load and play the new video
+            if (isVideoReady) {
+                player.loadVideoById(videoId);
+                player.mute(); // Ensure mute remains set
+            }
+        }
+
+        function handleNextStep() {
+            const currentTask = taskData.tasks[0];
+            const nextIndex = currentStepIndex + 1;
+
+            if (nextIndex < currentTask.steps.length) {
+                // Go to next step
+                loadStep(nextIndex);
+            } else {
+                // Last step: Show completion message
+                nextBtn.classList.add('hidden');
+                completionMessage.classList.remove('hidden');
+                player.stopVideo();
+
+                // Optional: Reset for retake
+                fullPlaySeen.fill(false);
+            }
+        }
+
+        function handleRetake() {
+            completionMessage.classList.add('hidden');
+            loadStep(0);
+        }
+
+        // --- Event Listeners ---
+        nextBtn.addEventListener('click', handleNextStep);
+        retakeBtn.addEventListener('click', handleRetake);
+
+        // Start the process by loading task data
+        loadTasks();
+
+    </script>
+</body>
+</html>
