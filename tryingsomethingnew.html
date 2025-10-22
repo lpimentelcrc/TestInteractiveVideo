@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Interactive Looping Video Player</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+
+    <!-- Inter font -->
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@100..900&display=swap');
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f4f6f8;
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 1rem;
+        }
+
+        /* Maintain 16:9 aspect ratio for the player */
+        .video-container {
+            position: relative;
+            padding-bottom: 56.25%;
+            height: 0;
+            overflow: hidden;
+            background-color: #d1d5db;
+            border-radius: 0.75rem;
+        }
+        .video-container iframe,
+        .video-container #player {
+            position: absolute;
+            inset: 0;
+            width: 100%;
+            height: 100%;
+        }
+
+        /* Disabled button look + block interactions */
+        .btn-disabled {
+            cursor: not-allowed;
+            opacity: 0.5;
+            transform: none !important;
+            pointer-events: none;
+        }
+
+        /* Custom 25%/75% grid at md+ */
+        @media (min-width: 768px) {
+            .md\:grid-cols-custom {
+                grid-template-columns: 1fr 3fr; /* 25% / 75% */
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- Main App -->
+    <div id="app" class="w-full max-w-6xl bg-white shadow-2xl rounded-xl p-6 md:p-10 transition-all duration-300">
+        <!-- Title gets replaced by JSON -->
+        <h1 class="text-3xl font-bold text-gray-800 mb-6 border-b pb-2">Interactive Guide (JSON Configured)</h1>
+
+        <div class="md:grid md:grid-cols-custom md:gap-10">
+            <!-- Left: Step label + Instructions + Button -->
+            <div class="md:col-span-1 mb-6 md:mb-0 flex flex-col justify-start">
+                <span id="step-display" class="text-lg font-semibold text-indigo-600 mb-1">Loading…</span>
+
+                <p id="instructions" class="text-gray-600 leading-relaxed min-h-[4rem]">
+                    Attempting to load configuration data from <strong>food_data.json</strong>…
+                </p>
+
+                <button
+                    id="next-button"
+                    class="mt-6 w-full mx-auto max-w-md bg-indigo-500 hover:bg-indigo-600 text-white font-bold py-5 px-4 rounded-lg transition duration-150 ease-in-out shadow-lg shadow-indigo-500/50 transform hover:scale-[1.02] btn-disabled"
+                    aria-disabled="true"
+                >
+                    Next Step
+                </button>
+            </div>
+
+            <!-- Right: YouTube Player -->
+            <div class="md:col-span-1 flex flex-col">
+                <div class="video-container">
+                    <div id="player" aria-label="Tutorial video player"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Completion Message -->
+        <div id="completion-message" class="hidden text-center mt-10 p-8 bg-green-50 border-2 border-green-300 rounded-xl">
+            <h2 class="text-3xl font-extrabold text-green-700">🎉 Tutorial Complete! 🎉</h2>
+            <p class="mt-3 text-lg text-green-600">You've finished all the steps in this interactive guide. Great job!</p>
+        </div>
+    </div>
+
+    <!-- YouTube IFrame Player API -->
+    <script src="https://www.youtube.com/iframe_api"></script>
+
+    <script>
+        // --- Configuration & State ---
+        let player;
+        let currentStep = 0;
+        let videoList = [];        // [{ id, step_title, instructions }]
+        let fullPlaySeen = [];     // [bool, bool, ...]
+
+        // --- DOM Elements ---
+        const stepDisplay = document.getElementById('step-display');
+        const instructionsText = document.getElementById('instructions');
+        const nextButton = document.getElementById('next-button');
+        const completionMessage = document.getElementById('completion-message');
+        const appContainer = document.getElementById('app');
+
+        // --- Helpers ---
+        function showNextButton(show) {
+            if (show) {
+                nextButton.disabled = false;
+                nextButton.classList.remove('btn-disabled');
+                nextButton.setAttribute('aria-disabled', 'false');
+            } else {
+                nextButton.disabled = true;
+                nextButton.classList.add('btn-disabled');
+                nextButton.setAttribute('aria-disabled', 'true');
+            }
+        }
+
+        // --- Data Load ---
+        async function fetchVideoData() {
+            try {
+                const response = await fetch('food_data.json');
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+
+                const config = await response.json();
+
+                // Choose the first task (adjust if you support multiple)
+                const task = config.tasks[0];
+                const videoLibrary = config.video_library || {};
+
+                // Update the main title
+                document.querySelector('h1').textContent = task.guide_title || 'Interactive Guide';
+
+                // Map steps: keep step_title separate so we can show "Step X: <title>"
+                const structuredSteps = (task.steps || []).map(step => ({
+                    id: videoLibrary[step.action_id],
+                    step_title: step.step_title || '',
+                    instructions: step.instruction || ''
+                }));
+
+                videoList = structuredSteps;
+                fullPlaySeen = new Array(videoList.length).fill(false);
+
+                if (!videoList.length) {
+                    throw new Error('No steps found in configuration.');
+                }
+
+                console.log(`Video configuration loaded successfully. ${videoList.length} steps found.`);
+            } catch (error) {
+                console.error('Error loading or parsing video data from food_data.json:', error);
+                instructionsText.textContent = `ERROR: Could not load guide data. Please ensure 'food_data.json' is available. Details: ${error.message}`;
+                stepDisplay.textContent = 'Error!';
+                showNextButton(false);
+            }
+        }
+
+        // --- YouTube API Entry Point ---
+        window.onYouTubeIframeAPIReady = async function () {
+            await fetchVideoData();
+            if (videoList.length > 0) {
+                loadStep(currentStep);
+            }
+        };
+
+        // --- Player / Step Logic ---
+        function loadStep(stepIndex) {
+            if (stepIndex >= videoList.length) {
+                showCompletion();
+                return;
+            }
+
+            const video = videoList[stepIndex];
+
+            // Update labels
+            const labelTitle = video.step_title ? `: ${video.step_title}` : '';
+            stepDisplay.textContent = `Step ${stepIndex + 1}${labelTitle}`;
+            instructionsText.textContent = video.instructions;
+
+            // Next button enabled only after first full watch
+            showNextButton(!!fullPlaySeen[stepIndex]);
+
+            const videoOptions = {
+                height: '100%',
+                width: '100%',
+                videoId: video.id,
+                playerVars: {
+                    controls: 1,
+                    rel: 0,
+                    modestbranding: 1,
+                    playsinline: 1,
+                    autoplay: 1,
+                    mute: 1
+                },
+                events: {
+                    onReady: onPlayerReady,
+                    onStateChange: onPlayerStateChange
+                }
+            };
+
+            if (!player) {
+                player = new YT.Player('player', videoOptions);
+            } else {
+                player.loadVideoById(video.id);
+            }
+        }
+
+        function onPlayerReady(event) {
+            if (typeof event.target.mute === 'function') {
+                event.target.mute();
+            }
+            event.target.playVideo();
+        }
+
+        function onPlayerStateChange(event) {
+            const YT_ENDED = 0;
+
+            if (event.data === YT_ENDED) {
+                // Mark the step as fully seen once
+                if (!fullPlaySeen[currentStep]) {
+                    fullPlaySeen[currentStep] = true;
+                    showNextButton(true);
+                    console.log(`Step ${currentStep + 1} viewed once. Next button enabled.`);
+                }
+
+                // Loop video
+                if (player && typeof player.seekTo === 'function') {
+                    player.seekTo(0);
+                    player.playVideo();
+                }
+            }
+        }
+
+        function nextStep() {
+            if (!fullPlaySeen[currentStep]) {
+                console.warn('Cannot proceed: Video has not finished its first run yet.');
+                return;
+            }
+
+            if (currentStep >= videoList.length - 1) {
+                showCompletion();
+                return;
+            }
+
+            if (player && typeof player.stopVideo === 'function') {
+                player.stopVideo();
+            }
+
+            currentStep++;
+            loadStep(currentStep);
+            appContainer.scrollIntoView({ behavior: 'smooth' });
+        }
+
+        function showCompletion() {
+            completionMessage.classList.remove('hidden');
+
+            // Hide interactive grid + title
+            const gridContainer = document.querySelector('.md\\:grid');
+            if (gridContainer) gridContainer.classList.add('hidden');
+            const title = document.querySelector('h1');
+            if (title) title.classList.add('hidden');
+        }
+
+        // --- Events ---
+        nextButton.addEventListener('click', nextStep);
+    </script>
+</body>
+</html>
