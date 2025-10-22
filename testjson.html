@@ -101,7 +101,7 @@
         async function loadTasks() {
             try {
                 // Fetch the external JSON file
-                const response = await fetch('food_data.json');
+                const response = await fetch('food_prep_data.json');
                 if (!response.ok) {
                     throw new Error(`HTTP error! status: ${response.status}`);
                 }
